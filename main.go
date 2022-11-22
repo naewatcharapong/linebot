@@ -6,14 +6,14 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 	"github.com/line/line-bot-sdk-go/v7/linebot"
 )
 
 var bot *linebot.Client
-
-var botforlog *linebot.Event
 
 type EventType string
 
@@ -23,7 +23,7 @@ func main() {
 	godotenv.Load("local.env")
 	var err error
 	bot, err = linebot.New(os.Getenv("CHANNEL_SECRET"), os.Getenv("CHANNEL_TOKEN"))
-	log.Println("Bot:", bot, " err:", err)
+	log.Println("Bot: Connected", " err:", err)
 	http.HandleFunc("/", callbackHandler)
 	port := os.Getenv("PORT")
 	addr := fmt.Sprintf(":%s", port)
@@ -53,7 +53,35 @@ func callbackHandler(w http.ResponseWriter, r *http.Request) {
 			switch message := event.Message.(type) {
 			// Handle only on text message
 			case *linebot.TextMessage:
-				if _, err = bot.ReplyMessage(event.ReplyToken, linebot.NewTextMessage("hellow")).Do(); err != nil {
+				var Liststring []string
+				Userreply := message.Text
+				if Userreply == "ListFile" {
+					listfiles, err := ioutil.ReadDir("./download/file/")
+					if err != nil {
+						log.Fatal(err)
+					}
+					for i, listfile := range listfiles {
+						Liststring = append(Liststring, strconv.Itoa(i+1)+"."+listfile.Name())
+					}
+					String := strings.Join(Liststring, "\n")
+					if _, err := bot.ReplyMessage(event.ReplyToken, linebot.NewTextMessage(String)).Do(); err != nil {
+						log.Print(err)
+					}
+				}
+				if Userreply == "ListImages" {
+					listfiles, err := ioutil.ReadDir("./download/images/")
+					if err != nil {
+						log.Fatal(err)
+					}
+					for i, listfile := range listfiles {
+						Liststring = append(Liststring, strconv.Itoa(i+1)+"."+listfile.Name())
+					}
+					String := strings.Join(Liststring, "\n")
+					if _, err := bot.ReplyMessage(event.ReplyToken, linebot.NewTextMessage(String)).Do(); err != nil {
+						log.Print(err)
+					}
+				}
+				if _, err = bot.ReplyMessage(event.ReplyToken, linebot.NewTextMessage("StatusOk")).Do(); err != nil {
 					log.Print(err)
 				}
 			// Handle only on file massage in group
