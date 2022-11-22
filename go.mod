@@ -6,6 +6,7 @@ require (
 	github.com/joho/godotenv v1.4.0
 	github.com/labstack/echo v3.3.10+incompatible
 	github.com/line/line-bot-sdk-go v7.8.0+incompatible
+	github.com/line/line-bot-sdk-go/v7 v7.18.0
 )
 
 require (
