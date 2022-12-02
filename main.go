@@ -10,7 +10,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -30,7 +29,7 @@ var userCollection *mongo.Collection = configs.GetCollection(configs.DB, "users"
 type EventType string
 
 type Data struct {
-	fifi string
+	file string
 }
 
 func main() {
@@ -39,7 +38,7 @@ func main() {
 	bot, err = linebot.New(os.Getenv("CHANNEL_SECRET"), os.Getenv("CHANNEL_TOKEN"))
 	log.Println("Bot: Connected", " err:", err)
 	router := gin.Default()
-	data := Data{fifi: ""}
+	data := Data{file: ""}
 	router.POST("/", data.callbackHandler)
 	router.GET("/download/:filename", func(c *gin.Context) {
 		filename := c.Param("filename")
@@ -68,6 +67,7 @@ func (d *Data) callbackHandler(c *gin.Context) {
 	}
 	for _, event := range events {
 		if event.Type == linebot.EventTypeMessage {
+			// Handle on print input json massage
 			jsonData, err := event.MarshalJSON()
 			if err != nil {
 				fmt.Printf("could not marshal json: %s\n", err)
@@ -77,70 +77,30 @@ func (d *Data) callbackHandler(c *gin.Context) {
 			switch message := event.Message.(type) {
 			// Handle only on text message
 			case *linebot.TextMessage:
-				var Liststring []string
 				Userreply := message.Text
 				if Userreply == "ListFile" {
-					listfiles, err := ioutil.ReadDir("./download/file/")
-					if err != nil {
-						log.Fatal(err)
-					}
-					for i, listfile := range listfiles {
-						Liststring = append(Liststring, strconv.Itoa(i+1)+"."+listfile.Name())
-					}
-					String := strings.Join(Liststring, "\n")
-					if _, err := bot.ReplyMessage(event.ReplyToken, linebot.NewTextMessage(String)).Do(); err != nil {
+					ListFile := ListItem()
+					if _, err := bot.ReplyMessage(event.ReplyToken, linebot.NewTextMessage(ListFile)).Do(); err != nil {
 						log.Print(err)
 					}
 				}
-				if strings.Contains(Userreply, "geturl") {
-					wantfile := strings.TrimPrefix(Userreply, "geturl")
-					bucket, err := gridfs.NewBucket(
-						configs.ConnectDB().Database("files"),
-					)
-					if err != nil {
-						panic(err)
-					}
-					filter := bson.D{{"filename", wantfile}}
-					cursor, err := bucket.Find(filter)
-					if err != nil {
-						panic(err)
-					}
-					type gridfsFile struct {
-						Name string `bson:"filename"`
-					}
-					var foundFiles []gridfsFile
-					if err = cursor.All(context.TODO(), &foundFiles); err != nil {
-						panic(err)
-					}
-					for _, file := range foundFiles {
-						if file.Name == wantfile {
-							if strings.Contains(wantfile, "pdf") {
-								d.fifi = wantfile
-								if _, err := bot.ReplyMessage(event.ReplyToken, linebot.NewTextMessage(strings.Replace("https://4828-203-150-255-17.ap.ngrok.io/download/"+wantfile, " ", "%20", -1))).Do(); err != nil {
-									log.Print(err)
-								}
-							} else if strings.Contains(wantfile, "jpg") {
-								d.fifi = wantfile
-								if _, err := bot.ReplyMessage(event.ReplyToken, linebot.NewImageMessage("https://4828-203-150-255-17.ap.ngrok.io/download/"+wantfile, "https://4828-203-150-255-17.ap.ngrok.io/download/"+wantfile)).Do(); err != nil {
-									log.Print(err)
-								}
+				if strings.Contains(Userreply, "Get ") {
+					wantfile := strings.TrimPrefix(Userreply, "Get ")
+					ListFile := ListItem()
+					if strings.Contains(ListFile, wantfile) {
+						if strings.Contains(wantfile, "pdf") {
+							d.file = wantfile
+							if _, err := bot.ReplyMessage(event.ReplyToken, linebot.NewTextMessage(strings.Replace("https://4828-203-150-255-17.ap.ngrok.io/download/"+wantfile, " ", "%20", -1))).Do(); err != nil {
+								log.Print(err)
+							}
+						} else if strings.Contains(wantfile, "jpg") {
+							d.file = wantfile
+							if _, err := bot.ReplyMessage(event.ReplyToken, linebot.NewImageMessage("https://4828-203-150-255-17.ap.ngrok.io/download/"+wantfile, "https://4828-203-150-255-17.ap.ngrok.io/download/"+wantfile)).Do(); err != nil {
+								log.Print(err)
 							}
 						}
 					}
-					if _, err := bot.ReplyMessage(event.ReplyToken, linebot.NewTextMessage("file does not exit")).Do(); err != nil {
-						log.Print(err)
-					}
-				}
-				if Userreply == "ListImages" {
-					listfiles, err := ioutil.ReadDir("./download/images/")
-					if err != nil {
-						log.Fatal(err)
-					}
-					for i, listfile := range listfiles {
-						Liststring = append(Liststring, strconv.Itoa(i+1)+"."+listfile.Name())
-					}
-					String := strings.Join(Liststring, "\n")
-					if _, err := bot.ReplyMessage(event.ReplyToken, linebot.NewTextMessage(String)).Do(); err != nil {
+					if _, err := bot.ReplyMessage(event.ReplyToken, linebot.NewTextMessage("File does not exits")).Do(); err != nil {
 						log.Print(err)
 					}
 				}
@@ -149,58 +109,19 @@ func (d *Data) callbackHandler(c *gin.Context) {
 				}
 			// Handle only on file massage in group
 			case *linebot.FileMessage:
-				err := os.MkdirAll("download/file", 0750)
-				if err != nil && !os.IsExist(err) {
-					log.Fatal(err)
-				}
-				content, err := bot.GetMessageContent(message.ID).Do()
-				if err != nil {
-					log.Fatal(err)
-				}
-				body, err := ioutil.ReadAll(content.Content)
-				if err != nil {
-					log.Fatal(err)
-				}
-				defer content.Content.Close()
-				err = ioutil.WriteFile("download/file/"+message.FileName, body, 0644)
-				if err != nil {
-					log.Fatal(err)
-				}
 				UploadFile("download/file/"+message.FileName, message.FileName)
-				if _, err = bot.ReplyMessage(event.ReplyToken, linebot.NewTextMessage("file already save to local and upload to database")).Do(); err != nil {
+				if _, err = bot.ReplyMessage(event.ReplyToken, linebot.NewTextMessage("File uploaded to database")).Do(); err != nil {
 					log.Print(err)
 				}
-				// Handle only on file massage in group
+				// Handle only on Images massage in group
 			case *linebot.ImageMessage:
-				err := os.MkdirAll("download/images", 0750)
-				if err != nil && !os.IsExist(err) {
-					log.Fatal(err)
-				}
-				content, err := bot.GetMessageContent(message.ID).Do()
-				if err != nil {
-					log.Fatal(err)
-				}
-				body, err := ioutil.ReadAll(content.Content)
-				if err != nil {
-					log.Fatal(err)
-				}
-				err = ioutil.WriteFile("download/images/"+message.ID+".jpg", body, 0644)
-				// error handling
-				if err != nil {
-					log.Fatal(err)
-				}
 				UploadFile("download/images/"+message.ID+".jpg", message.ID)
-				if _, err = bot.ReplyMessage(event.ReplyToken, linebot.NewTextMessage("images already save to local and upload to database")).Do(); err != nil {
+				if _, err = bot.ReplyMessage(event.ReplyToken, linebot.NewTextMessage("Images uploaded to database")).Do(); err != nil {
 					log.Print(err)
 				}
 			// Handle only on Sticker message
 			case *linebot.StickerMessage:
-				var kw string
-				for _, k := range message.Keywords {
-					kw = kw + "," + k
-				}
-				outStickerResult := fmt.Sprintf("detail: %s, pkg: %s kw: %s  text: %s", message.StickerID, message.PackageID, kw, message.Text)
-				if _, err = bot.ReplyMessage(event.ReplyToken, linebot.NewTextMessage(outStickerResult)).Do(); err != nil {
+				if _, err = bot.ReplyMessage(event.ReplyToken, linebot.NewTextMessage("StatusOk")).Do(); err != nil {
 					log.Print(err)
 				}
 			}
@@ -214,7 +135,6 @@ func (d *Data) callbackHandler(c *gin.Context) {
 			log.Printf("json data is : %s", jsonData)
 			_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-
 			newUser := model.User{
 				Id:        event.Source.UserID,
 				CreatedAt: event.Timestamp.Local(),
@@ -225,6 +145,9 @@ func (d *Data) callbackHandler(c *gin.Context) {
 					"error": err.Error(),
 				})
 				return
+			}
+			if _, err = bot.ReplyMessage(event.ReplyToken, linebot.NewTextMessage("Collect UserID to Database")).Do(); err != nil {
+				log.Print(err)
 			}
 			c.JSON(http.StatusCreated, gin.H{
 				"message": "success",
@@ -240,7 +163,6 @@ func (d *Data) callbackHandler(c *gin.Context) {
 			log.Printf("json data is : %s", jsonData)
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-
 			result, err := userCollection.DeleteOne(ctx, bson.M{"id": event.Source.UserID})
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{
@@ -248,12 +170,44 @@ func (d *Data) callbackHandler(c *gin.Context) {
 				})
 				return
 			}
+			if _, err = bot.ReplyMessage(event.ReplyToken, linebot.NewTextMessage("Remove UserID from Database")).Do(); err != nil {
+				log.Print(err)
+			}
 			fmt.Printf("DeleteOne removed %v document(s)\n", result.DeletedCount)
 			c.JSON(http.StatusCreated, gin.H{
 				"message": "success",
 			})
 		}
 	}
+}
+
+func ListItem() string {
+	var Liststring []string
+	bucket, err := gridfs.NewBucket(
+		configs.ConnectDB().Database("files"),
+	)
+	if err != nil {
+		panic(err)
+	}
+	filter := bson.D{{}}
+	cursor, err := bucket.Find(filter)
+	if err != nil {
+		panic(err)
+	}
+	type gridfsFile struct {
+		Name string `bson:"filename"`
+	}
+	var foundFiles []gridfsFile
+	if err = cursor.All(context.TODO(), &foundFiles); err != nil {
+		panic(err)
+	}
+	for i, file := range foundFiles {
+		if i <= 9 {
+			Liststring = append(Liststring, fmt.Sprintf("%d.filename: %s", i+1, file.Name))
+		}
+	}
+	String := strings.Join(Liststring, "\n")
+	return String
 }
 
 func UploadFile(file, filename string) {
